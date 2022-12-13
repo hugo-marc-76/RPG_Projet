@@ -1,0 +1,120 @@
+﻿@page "/counter"
+@using Blazor3D.Cameras;
+@using Blazor3D.Events;
+@using Blazor3D.Settings
+@using Blazor3D.Scenes
+@using Blazor3D.Lights
+@using Blazor3D.Maths
+@using Blazor3D.Materials
+@using Blazor3D.Objects
+@using Blazor3D.Geometires
+@using Blazor3D.Enums
+@using Blazor3D.Viewers;
+@implements IDisposable
+@inject IJSRuntime JsRuntime
+
+<Viewer @ref="View3D1" Scene=scene />
+
+<div>@msg</div>
+
+@code {
+
+    private Viewer View3D1 = null!;
+    private Scene scene = new Scene();
+    private Guid loadedObjectGuid = Guid.NewGuid();
+    private string msg = string.Empty;
+
+
+    public void Dispose()
+    {
+        View3D1.ObjectLoaded -= OnObjectLoaded;
+        View3D1.JsModuleLoaded -= OnJsModuleLoaded;
+    }
+
+    protected override Task OnInitializedAsync()
+    {
+        AddLights();
+        return base.OnInitializedAsync();
+    }
+
+
+
+    private void AddLights()
+    {
+        scene.Add(new AmbientLight());
+        scene.Add(new PointLight()
+            {
+                Intensity = 1f,
+                Position = new Vector3(100, 200, 100)
+            });
+        scene.Add(new PointLight()
+            {
+                Intensity = 1f,
+                Position = new Vector3(5, 5, 5)
+            });
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // subscribe events only once
+            View3D1.ObjectLoaded += OnObjectLoaded;
+            View3D1.JsModuleLoaded += OnJsModuleLoaded;
+        }
+
+        return base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task OnJsModuleLoaded()
+    {
+        var settings = new ImportSettings
+            {
+                Format = Import3DFormats.Fbx,
+                FileURL = "3DModels/Pittsburg.fbx",
+            };
+        loadedObjectGuid = await View3D1.Import3DModelAsync(settings);
+        await View3D1.SetCameraPositionAsync(new Vector3(100, 100, 100), new Vector3(0, 0, 0));
+        PerspectiveCamera test = new PerspectiveCamera();
+        test.Far = 1000;
+        View3D1.Camera = test;
+
+    }
+
+
+    private Task OnObjectLoaded(Object3DArgs e)
+    {
+        // After object is loaded to component scene, you can locate it's C# clone in the scene.Children
+        // At the moment, only  Object3D.Uuid and Object3D.Type properties are syncronized.
+        foreach (var item in scene.Children)
+        {
+            if (item.Uuid == e.UUID)
+            {
+                this.msg = $"loaded object with id = {e.UUID} and type {item.Type}. Initial guid was {loadedObjectGuid}";
+                StateHasChanged();
+                break;
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    // this one clears scene completely. it removes all items: lights, helpers, meshes, etc.
+    private async Task OnClearAllClick()
+    {
+        await View3D1.ClearSceneAsync();
+        AddLights();
+        await View3D1.UpdateScene();
+    }
+
+    // this one removes last item in scene.Children collection.
+    // notice, that first two items are lights
+    private async Task OnDeleteLast()
+    {
+        if (scene.Children.Count > 0)
+        {
+            var last = scene.Children.Last();
+            // removes item by its unique identifier
+            await View3D1.RemoveByUuidAsync(last.Uuid);
+        }
+    }
+}
