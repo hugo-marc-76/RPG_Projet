@@ -1,5 +1,6 @@
 ﻿@page "/counter"
 @using Blazor3D.Cameras;
+@using Blazor3D.Core;
 @using Blazor3D.Events;
 @using Blazor3D.Settings
 @using Blazor3D.Scenes
@@ -13,7 +14,7 @@
 @implements IDisposable
 @inject IJSRuntime JsRuntime
 
-<Viewer @ref="View3D1" Scene=scene />
+<Viewer @ref="View3D1" ViewerSettings=@settings Camera=camera Scene=scene />
 
 <div>@msg</div>
 
@@ -24,11 +25,23 @@
     private Guid loadedObjectGuid = Guid.NewGuid();
     private string msg = string.Empty;
 
+    private ViewerSettings settings = new ViewerSettings()
+        {
+            ContainerId = "example1",
+            CanSelect = true,// default is false
+            SelectedColor = "black",
+            WebGLRendererSettings = new WebGLRendererSettings
+            {
+                Antialias = false // if you need poor quality for some reasons
+            }
+        };
+
 
     public void Dispose()
     {
         View3D1.ObjectLoaded -= OnObjectLoaded;
         View3D1.JsModuleLoaded -= OnJsModuleLoaded;
+        View3D1.ObjectSelected -= OnObjectSelected;
     }
 
     protected override Task OnInitializedAsync()
@@ -38,19 +51,36 @@
     }
 
 
+    private Camera camera = new OrthographicCamera(left: -2, right: 2, top: 2, bottom: -2, zoom: 0.5f, near: -10)
+        {
+            Position = new Vector3(1, 1, 1),
+            AnimateRotationSettings = new AnimateRotationSettings(true, 0.1, 0, 0.1, radius: 3)
+            {
+                StopAnimationOnOrbitControlMove = true
+            },
+            LookAt = new Vector3(0.5f, 0, 0)
+        };
+
+
 
     private void AddLights()
     {
         scene.Add(new AmbientLight());
+
         scene.Add(new PointLight()
             {
                 Intensity = 1f,
-                Position = new Vector3(100, 200, 100)
+                Position = new Vector3(0, 500, 0)
             });
-        scene.Add(new PointLight()
+
+        scene.Add(new Mesh()
             {
-                Intensity = 1f,
-                Position = new Vector3(5, 5, 5)
+                Geometry = new BoxGeometry(width: 1000f, height: 1000f, depth: 1000f),
+                Position = new Vector3(500, 0, 5),
+                Material = new MeshStandardMaterial()
+                {
+                    Color = "magenta"
+                }
             });
     }
 
@@ -61,6 +91,7 @@
             // subscribe events only once
             View3D1.ObjectLoaded += OnObjectLoaded;
             View3D1.JsModuleLoaded += OnJsModuleLoaded;
+            View3D1.ObjectSelected += OnObjectSelected;
         }
 
         return base.OnAfterRenderAsync(firstRender);
@@ -74,12 +105,40 @@
                 FileURL = "3DModels/RPGFestScene.fbx",
             };
         loadedObjectGuid = await View3D1.Import3DModelAsync(settings);
-        await View3D1.SetCameraPositionAsync(new Vector3(100, 100, 100), new Vector3(0, 0, 0));
 
+        var settings2 = new ImportSettings
+            {
+                Format = Import3DFormats.Fbx,
+                FileURL = "3DModels/GameRoom.fbx",
+            };
+        loadedObjectGuid = await View3D1.Import3DModelAsync(settings2);
+        //await View3D1.SetCameraPositionAsync(new Vector3(100, 100, 100), new Vector3(0, 0, 0));
+
+        await View3D1.UpdateCamera(new PerspectiveCamera
+            {
+                Position = new Vector3(100, 100, 100),
+                LookAt = new Vector3(0, 0.5f, 0),
+                Far = 10000,
+            });
+
+
+
+        foreach (var test in scene.Children.ToList())
+        {
+            Console.WriteLine(test);
+        }
 
     }
 
 
+    private void OnObjectSelected(Object3DArgs e)
+    {
+        this.msg = e.UUID.ToString();
+        var test = scene.Children.Find(x => x.Name == "GameRoom");
+        this.msg += "\n" + test.Name;
+    }
+
+    
     private Task OnObjectLoaded(Object3DArgs e)
     {
         // After object is loaded to component scene, you can locate it's C# clone in the scene.Children
